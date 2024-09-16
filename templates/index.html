@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>对话助手</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> <!-- 引入 marked.js -->
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f8;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #343541;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+        .sidebar button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .sidebar button:hover {
+            background-color: #0056b3;
+        }
+        .sidebar .conversation-history {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        .conversation-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #444654;
+            border-radius: 5px;
+        }
+        .conversation-item button {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .conversation-item button:hover {
+            background-color: #c82333;
+        }
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            flex-grow: 1;
+            background-color: white;
+            overflow: hidden;
+        }
+        .chat-box {
+            padding: 20px;
+            flex-grow: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            background-color: #f7f7f8;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px 15px;
+            max-width: 80%;
+            border-radius: 20px;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+        .user-message {
+            align-self: flex-end;
+            background-color: #007bff;
+            color: white;
+        }
+        .assistant-message {
+            align-self: flex-start;
+            background-color: #e9e9eb;
+            color: #000;
+        }
+        .input-box {
+            display: flex;
+            padding: 20px;
+            background-color: #f0f0f0;
+            border-top: 1px solid #ddd;
+        }
+        .input-box input[type="text"] {
+            flex-grow: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            margin-right: 10px;
+        }
+        .input-box button {
+            padding: 12px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        .input-box button:disabled {
+            background-color: #bbb;
+            cursor: not-allowed;
+        }
+        .input-box button:hover:enabled {
+            background-color: #0056b3;
+        }
+        /* 样式适用于 Markdown 转换的内容 */
+        .markdown-content {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            word-wrap: break-word;
+        }
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+            margin: 10px 0;
+        }
+        .markdown-content p {
+            margin: 5px 0;
+        }
+        .markdown-content code {
+            background-color: #f1f1f1;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .markdown-content pre {
+            background-color: #f1f1f1;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .stop-button {
+            background-color: #dc3545;
+            color: white;
+            padding: 12px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .stop-button:disabled {
+            background-color: #bbb;
+            cursor: not-allowed;
+        }
+        .stop-button:hover:enabled {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <button onclick="resetConversation()">+ 新对话</button>
+        <div class="conversation-history" id="conversation-history">
+            <!-- 对话历史会显示在这里 -->
+        </div>
+    </div>
+
+    <div class="chat-container">
+        <div class="chat-box" id="chat-box">
+            <!-- 对话内容会显示在这里 -->
+        </div>
+
+        <div class="input-box">
+            <input type="text" id="message-input" placeholder="输入你的问题...">
+            <button id="send-btn" onclick="sendMessage()">发送</button>
+            <button id="stop-btn" class="stop-button" onclick="stopTyping()" disabled>停止回答</button>
+        </div>
+    </div>
+
+    <script>
+        let conversations = []; // 存储所有对话的数组，每个元素为一个对话历史
+        let currentConversationId = null; // 当前对话ID
+        let conversationCounter = 0; // 用于生成新的对话ID
+        let typingInProgress = false; // 用于跟踪打字效果是否正在进行
+        let typingInterval; // 用于存储打字机效果的定时器
+        let stopRequested = false; // 用于标记是否停止打字
+
+        // 在聊天框中添加消息，并支持 Markdown
+        function appendMessage(role, message, typing = false) {
+            const chatBox = document.getElementById('chat-box');
+            const newMessage = document.createElement('div');
+            newMessage.classList.add('message', role + '-message');
+            newMessage.classList.add('markdown-content'); // 添加 Markdown 样式类
+
+            // 如果是打字机效果，逐字显示
+            if (typing) {
+                chatBox.appendChild(newMessage); // 先附加空的消息容器
+                typeMessage(newMessage, message); // 启动打字机效果
+            } else {
+                newMessage.innerHTML = marked.parse(message); // 直接显示完整消息
+                chatBox.appendChild(newMessage);
+            }
+            
+            chatBox.scrollTop = chatBox.scrollHeight; // 保持滚动条在底部
+        }
+
+        // 动态调整打字速度并允许停止打字机效果
+        function typeMessage(element, message) {
+            let i = 0;
+            const totalLength = message.length;
+
+            function typeNextCharacter() {
+                if (stopRequested) {
+                    // 停止后，不显示剩余内容，准备接收下一个问题
+                    stopRequested = false;
+                    typingInProgress = false;
+                    appendMessage("assistant", "您请说"); // 停止后显示提示语
+                    unlockSendButton(); // 立即解锁发送按钮
+                    unlockStopButton(); // 停止按钮也恢复
+                    return;
+                }
+
+                if (i < totalLength) {
+                    element.innerHTML = marked.parse(message.substring(0, i + 1));
+                    i++;
+                    const speed = 30; // 设置较快的速度
+                    typingInterval = setTimeout(typeNextCharacter, speed);
+                } else {
+                    typingInProgress = false; // 打字完成
+                    unlockSendButton(); // 重新启用发送按钮
+                    unlockStopButton(); // 停止按钮也恢复
+                }
+            }
+            typingInProgress = true;
+            lockSendButton(); // 打字过程中锁定发送按钮
+            lockStopButton(); // 启动打字时启用停止按钮
+            typeNextCharacter();
+        }
+
+        // 停止打字机效果
+        function stopTyping() {
+            stopRequested = true; // 标记为停止
+            clearTimeout(typingInterval); // 停止当前定时器
+            typingInProgress = false; // 停止打字的标志
+            unlockSendButton(); // 立即解锁发送按钮
+            unlockStopButton(); // 停止按钮也恢复
+        }
+
+        // 锁定发送按钮，但不锁定输入框
+        function lockSendButton() {
+            document.getElementById('send-btn').disabled = true;
+        }
+
+        // 解锁发送按钮
+        function unlockSendButton() {
+            document.getElementById('send-btn').disabled = false;
+        }
+
+        // 锁定停止按钮
+        function lockStopButton() {
+            document.getElementById('stop-btn').disabled = false;
+        }
+
+        // 解锁停止按钮
+        function unlockStopButton() {
+            document.getElementById('stop-btn').disabled = true;
+        }
+
+        // 发送消息并保存到当前对话
+        function sendMessage() {
+            if (typingInProgress) return; // 如果打字机效果正在进行，阻止发送消息
+
+            const messageInput = document.getElementById('message-input');
+            const message = messageInput.value;
+
+            if (message === "") return;
+
+            // 如果是第一次发送消息，保存对话到左侧列表
+            if (conversations[currentConversationId].length === 0) {
+                saveConversation(); // 第一次发送消息时保存到左侧
+            }
+
+            // 添加用户消息到当前聊天框
+            appendMessage("user", message);
+            // 保存消息到当前对话的历史
+            conversations[currentConversationId].push({ role: "user", content: message });
+
+            // 模拟发送消息到后端并获取回复
+            fetch("/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // 添加助手的回复并逐字显示
+                appendMessage("assistant", data.reply, true); // 打字机效果显示助手回复
+                // 保存助手的回复到当前对话历史
+                conversations[currentConversationId].push({ role: "assistant", content: data.reply });
+            });
+
+            messageInput.value = "";  // 清空输入框
+        }
+
+        // 新建对话，开始新的对话历史
+        function resetConversation() {
+            // 初始化一个新的对话，但不保存到左侧列表
+            currentConversationId = conversationCounter++;
+            conversations[currentConversationId] = []; // 创建一个新的对话历史
+            document.getElementById('chat-box').innerHTML = ""; // 清空聊天框
+            appendMessage("assistant", "新的对话已开始。");
+        }
+
+        // 将当前对话显示在左侧的对话历史列表中
+        function saveConversation() {
+            const conversationHistory = document.getElementById('conversation-history');
+            const conversationItem = document.createElement('div');
+            conversationItem.classList.add('conversation-item');
+            const newButton = document.createElement('button');
+            newButton.textContent = `对话 ${currentConversationId + 1}`; // 显示第几次对话
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = '删除';
+
+            // 删除对话
+            deleteButton.onclick = () => deleteConversation(currentConversationId, conversationItem);
+
+            const savedId = currentConversationId; // 捕获当前的对话ID
+            newButton.onclick = () => loadConversation(savedId);
+
+            conversationItem.appendChild(newButton);
+            conversationItem.appendChild(deleteButton);
+            conversationHistory.appendChild(conversationItem);
+        }
+
+        // 删除对话
+        function deleteConversation(id, element) {
+            // 从对话列表中删除
+            conversations[id] = null; // 将该对话置为 null
+            element.remove(); // 从界面上移除
+        }
+
+        // 加载已保存的对话历史
+        function loadConversation(id) {
+            currentConversationId = id;
+            document.getElementById('chat-box').innerHTML = "";  // 清空当前聊天框
+
+            // 加载并显示选中的对话
+            if (conversations[id]) {
+                conversations[id].forEach(msg => {
+                    appendMessage(msg.role, msg.content);
+                });
+            }
+        }
+
+        // 初始化，创建第一条对话
+        resetConversation();
+    </script>
+</body>
+</html>
