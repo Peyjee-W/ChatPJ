@@ -53,7 +53,19 @@ This project is a Flask web application that provides a chat assistant interface
    openai.api_key = "your-api-key"
    ```
 
-## Running the Application
+## Alternative Usage
+
+If you prefer not to install Python and the dependencies, you can download the pre-built executable from the [releases](https://github.com/Peyjee-W/ChatPJ/releases) section:
+
+1. Download the `chatwpj.zip` from the **releases** section.
+2. Extract the contents of the zip file.
+3. Navigate to the `chatwpj\dist` directory.
+4. Double-click `app.exe` to run the application.
+5. After a short moment, a browser window will automatically open pointing to `http://127.0.0.1:5000/`.
+
+You can then interact with the assistant through the web interface.
+
+## Running the Application Manually
 
 1. Start the Flask application:
    ```bash
